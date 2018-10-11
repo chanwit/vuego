@@ -1,0 +1,61 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="vue.js"></script>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+            go.run(result.instance);
+        });
+    </script>
+    <style>
+        .container {
+            width: 40%;
+            margin: 20px auto 0px auto;
+        }
+
+        .removed {
+            color: gray;
+        }
+
+        .removed label {
+            text-decoration: line-through;
+        }
+
+        ul li {
+            list-style-type: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container">
+    <h2>{{ title }}</h2>
+    <div class="input-group">
+        <input v-model="newItem" v-on:keyup.enter="addItem"
+               placeholder="add todo item" type="text" class="formcontrol"/>
+        <span class="input-group-btn">
+            <button v-on:click="addItem" class="btn btn-default" type="button">Add!</button>
+        </span>
+    </div>
+    <ul>
+        <li v-for="item in items"
+            v-bind:class="{ 'removed': item.checked }">
+            <div class="checkbox">
+                <label>
+                <input type="checkbox" v-model="item.checked"/>
+                {{ item.text }}
+                </label>
+            </div>
+        </li>
+    </ul>
+    <div class="footer">
+        <hr/>
+        <em>Change the title</em>
+        <input v-model="title"/>
+    </div>
+</div>
+
+</body>
+</html>
