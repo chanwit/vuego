@@ -2,18 +2,22 @@ package vuego
 
 import (
 	"fmt"
+	"github.com/segmentio/ksuid"
 	"reflect"
 	"syscall/js"
 )
 
 type Vue struct {
 	js.Value
-	El      string
-	Data    interface{}
-	Methods *Methods
+	El   string
+	Data interface{}
 
-	Created func()
-	Mounted func()
+	Methods *Methods
+	Filters *Filters
+	Watch   *Watch
+
+	Created func(interface{}, []js.Value)
+	Mounted func(interface{}, []js.Value)
 }
 
 var ctor = js.Global().Get("Object")
@@ -23,14 +27,15 @@ func ValueOf(rv reflect.Value) js.Value {
 	fmt.Printf(">> ValueOf: DEBUG calling ValueOf type=%s\n", rv.Type().Name())
 	switch rv.Kind() {
 	case reflect.Slice:
-		fmt.Println(">>>> case slice")
+		fmt.Printf(">>>> case slice (%v)\n", rv.Interface())
 		a := arr.New(rv.Len())
 		for i := 0; i < rv.Len(); i++ {
+			fmt.Printf(">>>>>> case slice elem (%v)\n", rv.Index(i).Interface())
 			a.SetIndex(i, ToJSON(rv.Index(i).Interface()))
 		}
 		return a
 	default:
-		fmt.Println(">>>> case default")
+		fmt.Printf(">>>> case default (%v)\n", rv.Interface())
 		return js.ValueOf(rv.Interface())
 	}
 }
@@ -41,6 +46,10 @@ func ToJSON(this interface{}) js.Value {
 
 	v := reflect.Indirect(reflect.ValueOf(this))
 	r := v.Type()
+
+	if r.Name() == "string" {
+		return js.ValueOf(v.Interface())
+	}
 
 	fmt.Printf(">>> DEBUG ToJSON type=%s\n", r.Name())
 
@@ -59,21 +68,33 @@ func ToJSON(this interface{}) js.Value {
 	return thisValue
 }
 
-/*
-func (this *M) SetMessage(s string) {
-	this.Value.Set("message", js.ValueOf(s))
-}
-*/
-
 func New(v *Vue) *Vue {
 	arg := ctor.New()
+	// arg.Set("_VUEGO_ID_", id)
 	arg.Set("el", v.El)
 	arg.Set("data", ToJSON(v.Data))
+	arg.Set("watch", js.ValueOf(*v.Watch))
+	arg.Set("created", js.NewCallback(func(args []js.Value) {
+		v.Created(v.Data, args)
+	}))
+
+	filters := ctor.New()
+	for name, fn := range *v.Filters {
+		id := "VUEGO_FILTER_" + ksuid.New().String()
+		output := id + "_OUTPUT"
+		// VUEGO_FILTER_1BThKORJGFF1Ayjinc54GDdFlEb_OUTPUT
+		cb := js.NewCallback(func(args []js.Value) {
+			js.Global().Set(output, js.ValueOf(fn(args[0])))
+		})
+		js.Global().Set(id, cb)
+		wrapper := js.Global().Call("eval", fmt.Sprintf("(function(v){ %s(v); return global.%s; })", id, output));
+		filters.Set(name, wrapper)
+	}
+	arg.Set("filters", filters)
 
 	methods := ctor.New()
 	for name, fn := range *v.Methods {
 		cb := js.NewCallback(func(args []js.Value) {
-			fmt.Println(">>>>>>>>>>>>> add item")
 			fn(v.Data)
 		});
 		methods.Set(name, js.ValueOf(cb))
@@ -84,7 +105,7 @@ func New(v *Vue) *Vue {
 	return v
 }
 
-func (v *Vue) Watch(prop string, callback func(newValue, oldValue js.Value)) {
+func (v *Vue) Watch0(prop string, callback func(newValue, oldValue js.Value)) {
 	cb := js.NewCallback(func(args []js.Value) {
 		callback(args[0], args[1])
 	})

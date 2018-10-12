@@ -83,12 +83,9 @@ func main() {
 						valFuncName := ""
 						tag := getTag(field)
 
-						// genGetter(typeSpec, field, typeName, tag, valFuncName)
-						// genSetter(typeSpec, field, typeName, tag, valFuncName)
+						// TODO required generate getters and setters?
 						genAdder(typeSpec, field, elemTypeName, tag, valFuncName)
 					}
-					// fmt.Println(typeName)
-					// fmt.Println(field.Tag.Value)
 				}
 			}
 		}
