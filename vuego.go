@@ -2,9 +2,10 @@ package vuego
 
 import (
 	"fmt"
-	"github.com/segmentio/ksuid"
 	"reflect"
 	"syscall/js"
+
+	"github.com/segmentio/ksuid"
 )
 
 type Vue struct {
@@ -70,36 +71,44 @@ func ToJSON(this interface{}) js.Value {
 
 func New(v *Vue) *Vue {
 	arg := ctor.New()
-	// arg.Set("_VUEGO_ID_", id)
 	arg.Set("el", v.El)
 	arg.Set("data", ToJSON(v.Data))
-	arg.Set("watch", js.ValueOf(*v.Watch))
-	arg.Set("created", js.NewCallback(func(args []js.Value) {
-		v.Created(v.Data, args)
-	}))
 
-	filters := ctor.New()
-	for name, fn := range *v.Filters {
-		id := "VUEGO_FILTER_" + ksuid.New().String()
-		output := id + "_OUTPUT"
-		// VUEGO_FILTER_1BThKORJGFF1Ayjinc54GDdFlEb_OUTPUT
-		cb := js.NewCallback(func(args []js.Value) {
-			js.Global().Set(output, js.ValueOf(fn(args[0])))
-		})
-		js.Global().Set(id, cb)
-		wrapper := js.Global().Call("eval", fmt.Sprintf("(function(v){ %s(v); return global.%s; })", id, output));
-		filters.Set(name, wrapper)
+	if v.Watch != nil {
+		arg.Set("watch", js.ValueOf(*v.Watch))
 	}
-	arg.Set("filters", filters)
 
-	methods := ctor.New()
-	for name, fn := range *v.Methods {
-		cb := js.NewCallback(func(args []js.Value) {
-			fn(v.Data)
-		});
-		methods.Set(name, js.ValueOf(cb))
+	if v.Created != nil {
+		arg.Set("created", js.NewCallback(func(args []js.Value) {
+			v.Created(v.Data, args)
+		}))
 	}
-	arg.Set("methods", methods)
+
+	if v.Filters != nil {
+		filters := ctor.New()
+		for name, fn := range *v.Filters {
+			id := "VUEGO_FILTER_" + ksuid.New().String()
+			output := id + "_OUTPUT"
+			cb := js.NewCallback(func(args []js.Value) {
+				js.Global().Set(output, js.ValueOf(fn(args[0])))
+			})
+			js.Global().Set(id, cb)
+			wrapper := js.Global().Call("eval", fmt.Sprintf("(function(v){ %s(v); return global.%s; })", id, output));
+			filters.Set(name, wrapper)
+		}
+		arg.Set("filters", filters)
+	}
+
+	if v.Methods != nil {
+		methods := ctor.New()
+		for name, fn := range *v.Methods {
+			cb := js.NewCallback(func(args []js.Value) {
+				fn(v.Data)
+			});
+			methods.Set(name, js.ValueOf(cb))
+		}
+		arg.Set("methods", methods)
+	}
 
 	v.Value = js.Global().Get("Vue").New(arg)
 	return v
@@ -110,4 +119,8 @@ func (v *Vue) Watch0(prop string, callback func(newValue, oldValue js.Value)) {
 		callback(args[0], args[1])
 	})
 	v.Value.Call("$watch", js.ValueOf(prop), cb)
+}
+
+func Use(val js.Value) {
+	js.Global().Get("Vue").Call("use", val)
 }
